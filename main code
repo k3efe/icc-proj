@@ -1,0 +1,96 @@
+import numpy as np
+import sounddevice as sd
+import time
+import requests
+
+# Function to generate binaural audio signals with intensity difference and delay
+def generate_binaural_audio(intensity_difference, delay_samples):
+    # Generate mono audio signal (e.g., white noise)
+    mono_audio_signal = np.random.randn(44100)  # Example: 1 second of white noise
+    
+    # Apply intensity difference to create left and right ear signals
+    left_ear_signal = mono_audio_signal * (10 ** (intensity_difference / 20))
+    right_ear_signal = np.concatenate((np.zeros(delay_samples), mono_audio_signal))
+
+    return left_ear_signal, right_ear_signal
+
+# Function to interact with ChatGPT API
+def get_chat_response(prompt):
+    # Your ChatGPT API endpoint and authentication headers
+    endpoint = "YOUR_API_ENDPOINT"
+    headers = {
+        "Authorization": "Bearer YOUR_API_KEY",
+        "Content-Type": "application/json"
+    }
+    
+    # Request payload
+    data = {
+        "prompt": prompt,
+        "max_tokens": 50  # Adjust as needed
+    }
+    
+    # Send request to ChatGPT API
+    response = requests.post(endpoint, headers=headers, json=data)
+    
+    # Return the generated text from the response
+    return response.json()["choices"][0]["text"].strip()
+
+# Function to simulate movement detection (replace with actual logic)
+def detect_movement():
+    # Example: Simulated movement detection (replace with actual logic)
+    return True
+
+# Function to simulate obstacle detection (replace with actual logic)
+def detect_obstacles():
+    # Example: Simulated obstacle detection (replace with actual logic)
+    obstacle_front = True
+    obstacle_left = False
+    obstacle_right = False
+    obstacle_behind = True
+    
+    return obstacle_front, obstacle_left, obstacle_right, obstacle_behind
+
+# Function to determine audio parameters based on obstacle detection
+def determine_audio_parameters(obstacle_front, obstacle_left, obstacle_right, obstacle_behind):
+    # Set default audio parameters
+    intensity_difference = 0
+    delay_samples = 0
+    
+    # Adjust parameters based on obstacle detection
+    if obstacle_front:
+        intensity_difference += 5  # Example: Increase intensity difference for obstacle in front
+        delay_samples += 2205  # Example: Add delay for obstacle in front
+    
+    if obstacle_left:
+        intensity_difference -= 3  # Example: Decrease intensity difference for obstacle on the left
+        delay_samples += 1102  # Example: Add smaller delay for obstacle on the left
+    
+    if obstacle_right:
+        intensity_difference -= 3  # Example: Decrease intensity difference for obstacle on the right
+        delay_samples -= 1102  # Example: Subtract smaller delay for obstacle on the right
+    
+    if obstacle_behind:
+        intensity_difference -= 5  # Example: Decrease intensity difference for obstacle behind
+        delay_samples -= 2205  # Example: Subtract delay for obstacle behind
+    
+    return intensity_difference, delay_samples
+
+# Function to play binaural audio
+def play_binaural_audio(left_ear_signal, right_ear_signal):
+    # Play binaural audio
+    sd.play(np.vstack((left_ear_signal, right_ear_signal)).T, samplerate=44100)
+    sd.wait()
+
+# Main loop for continuous operation
+while True:
+    if detect_movement():
+        obstacle_front, obstacle_left, obstacle_right, obstacle_behind = detect_obstacles()
+        intensity_difference, delay_samples = determine_audio_parameters(obstacle_front, obstacle_left, obstacle_right, obstacle_behind)
+        
+        # Generate binaural audio signals based on obstacle detection
+        left_ear_signal, right_ear_signal = generate_binaural_audio(intensity_difference, delay_samples)
+        
+        # Play binaural audio
+        play_binaural_audio(left_ear_signal, right_ear_signal)
+        
+    time.sleep(1)  # Adjust as needed for desired frequency of movement detection
