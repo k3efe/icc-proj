@@ -1,41 +1,133 @@
-from transformers import GPT2Tokenizer, GPT2LMHeadModel
-from transformers import TextDataset, DataCollatorForLanguageModeling
-from transformers import Trainer, TrainingArguments
+import os
+import cv2
+from azure.cognitiveservices.vision.computervision import ComputerVisionClient
+from azure.cognitiveservices.vision.computervision.models import OperationStatusCodes
+from msrest.authentication import CognitiveServicesCredentials
+from azure.cognitiveservices.speech import SpeechConfig, AudioConfig, SpeechSynthesizer
+from playsound import playsound
 
-# Load pre-trained GPT model and tokenizer
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+def capture_image(camera_index=0):
+    try:
+        # Initialize camera capture
+        cap = cv2.VideoCapture(camera_index)
+        
+        # Check if the camera is opened successfully
+        if not cap.isOpened():
+            speak_text("Failed to open camera.")
+            return None
+        
+        # Capture an image
+        ret, frame = cap.read()
+        
+        # Release the camera
+        cap.release()
+        
+        if ret:
+            # Save the captured image
+            image_path = "captured_image.jpg"
+            cv2.imwrite(image_path, frame)
+            return image_path
+        else:
+            speak_text("Failed to capture image.")
+            return None
+    except Exception as e:
+        speak_text(f"Error capturing image: {e}")
+        return None
 
-# Load and preprocess your dataset
-train_dataset = TextDataset(
-    tokenizer=tokenizer,
-    file_path="your_dataset.txt",  # Path to your dataset file
-    block_size=128
-)
-data_collator = DataCollatorForLanguageModeling(
-    tokenizer=tokenizer,
-    mlm=False
-)
+def recognize_text(image_path, subscription_key, endpoint):
+    try:
+        # Set up Computer Vision client
+        credentials = CognitiveServicesCredentials(subscription_key)
+        computer_vision_client = ComputerVisionClient(endpoint, credentials)
 
-# Fine-tune the GPT model on your dataset
-training_args = TrainingArguments(
-    output_dir="./gpt2-finetuned-obstacle",
-    overwrite_output_dir=True,
-    num_train_epochs=3,
-    per_device_train_batch_size=8,
-    save_steps=10_000,
-    save_total_limit=2
-)
+        # Read image file
+        with open(image_path, "rb") as image_stream:
+            # Call the Computer Vision service to recognize text
+            recognize_text_results = computer_vision_client.recognize_printed_text_in_stream(image_stream)
 
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    data_collator=data_collator,
-    train_dataset=train_dataset
-)
+        # Extract recognized text from response
+        recognized_text = ""
+        for region in recognize_text_results.regions:
+            for line in region.lines:
+                recognized_text += " ".join([word.text for word in line.words]) + "\n"
 
-trainer.train()
+        return recognized_text
+    except Exception as e:
+        speak_text(f"Error recognizing text: {e}")
+        return None
 
-# Save the fine-tuned model
-model.save_pretrained("./gpt2-finetuned-obstacle")
-tokenizer.save_pretrained("./gpt2-finetuned-obstacle")
+def generate_audio(text, azure_key, azure_region):
+    try:
+        # Set up Azure Speech configuration
+        speech_config = SpeechConfig(subscription=azure_key, region=azure_region)
+
+        # Initialize Speech Synthesizer
+        synthesizer = SpeechSynthesizer(speech_config=speech_config)
+
+        # Generate audio from text
+        result = synthesizer.speak_text_async(text).get()
+
+        # Get audio data
+        audio_data = result.audio_data
+
+        return audio_data
+    except Exception as e:
+        speak_text(f"Error generating audio: {e}")
+        return None
+
+def play_audio(audio_data):
+    try:
+        # Save audio to a temporary file
+        temp_audio_path = "temp_audio.wav"
+        with open(temp_audio_path, "wb") as f:
+            f.write(audio_data)
+        
+        # Play the audio
+        playsound(temp_audio_path)
+        
+        # Delete temporary audio file
+        os.remove(temp_audio_path)
+    except Exception as e:
+        speak_text(f"Error playing audio: {e}")
+
+def speak_text(text):
+    try:
+        # Set up Azure Speech configuration
+        speech_config = SpeechConfig(subscription="YourAzureSpeechKey", region="YourAzureRegion")
+
+        # Initialize Speech Synthesizer
+        synthesizer = SpeechSynthesizer(speech_config=speech_config)
+
+        # Generate audio from text
+        result = synthesizer.speak_text_async(text).get()
+    except Exception as e:
+        print(f"Error speaking text: {e}")
+
+# Azure Cognitive Services credentials
+subscription_key = "YourAzureCognitiveServicesKey"
+endpoint = "YourAzureCognitiveServicesEndpoint"
+
+# Capture an image from the camera
+image_path = capture_image()
+
+if image_path:
+    print("Image captured successfully:", image_path)
+    
+    # Recognize text from the image
+    recognized_text = recognize_text(image_path, subscription_key, endpoint)
+    
+    if recognized_text:
+        print("Text recognized:", recognized_text)
+        
+        # Generate audio from recognized text
+        audio_data = generate_audio(recognized_text, "YourAzureSpeechKey", "YourAzureRegion")
+
+        if audio_data:
+            # Play the audio
+            play_audio(audio_data)
+        else:
+            speak_text("Failed to generate audio.")
+    else:
+        speak_text("Failed to recognize text from the image.")
+else:
+    speak_text("Failed to capture image.")
