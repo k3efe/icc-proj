@@ -1,0 +1,131 @@
+import cv2
+import os
+from azure.cognitiveservices.vision.computervision import ComputerVisionClient
+from azure.cognitiveservices.vision.computervision.models import OperationStatusCodes
+from msrest.authentication import CognitiveServicesCredentials
+from azure.cognitiveservices.speech import SpeechConfig, AudioConfig, SpeechSynthesizer
+from playsound import playsound
+
+def recognize_text(image, subscription_key, endpoint):
+    try:
+        # Set up Computer Vision client
+        credentials = CognitiveServicesCredentials(subscription_key)
+        computer_vision_client = ComputerVisionClient(endpoint, credentials)
+
+        # Call the Computer Vision service to recognize text
+        recognize_text_results = computer_vision_client.recognize_printed_text_in_stream(image)
+
+        # Extract recognized text from response
+        recognized_text = ""
+        for region in recognize_text_results.regions:
+            for line in region.lines:
+                recognized_text += " ".join([word.text for word in line.words]) + "\n"
+
+        return recognized_text.strip()
+    except Exception as e:
+        print(f"Error recognizing text: {e}")
+        return None
+
+def generate_audio(text, azure_key, azure_region):
+    try:
+        # Set up Azure Speech configuration
+        speech_config = SpeechConfig(subscription=azure_key, region=azure_region)
+
+        # Initialize Speech Synthesizer
+        synthesizer = SpeechSynthesizer(speech_config=speech_config)
+
+        # Generate audio from text
+        result = synthesizer.speak_text_async(text).get()
+
+        # Get audio data
+        audio_data = result.audio_data
+
+        return audio_data
+    except Exception as e:
+        print(f"Error generating audio: {e}")
+        return None
+
+def play_audio(audio_data):
+    try:
+        # Save audio to a temporary file
+        temp_audio_path = "temp_audio.wav"
+        with open(temp_audio_path, "wb") as f:
+            f.write(audio_data)
+        
+        # Play the audio
+        playsound(temp_audio_path)
+        
+        # Delete temporary audio file
+        os.remove(temp_audio_path)
+    except Exception as e:
+        print(f"Error playing audio: {e}")
+
+def speak_failure(message, azure_key, azure_region):
+    try:
+        # Set up Azure Speech configuration
+        speech_config = SpeechConfig(subscription=azure_key, region=azure_region)
+
+        # Initialize Speech Synthesizer
+        synthesizer = SpeechSynthesizer(speech_config=speech_config)
+
+        # Speak the failure message
+        result = synthesizer.speak_text_async(message).get()
+    except Exception as e:
+        print(f"Error speaking text: {e}")
+
+# Azure Cognitive Services credentials
+subscription_key = "YourAzureCognitiveServicesKey"
+endpoint = "YourAzureCognitiveServicesEndpoint"
+
+# Video capture from camera
+cap = cv2.VideoCapture(0)
+
+# Main loop
+while True:
+    # Read a frame from the video stream
+    ret, frame = cap.read()
+    
+    if ret:
+        # Recognize text from the frame
+        recognized_text = recognize_text(frame, subscription_key, endpoint)
+        
+        if recognized_text:
+            # Generate audio from recognized text
+            audio_data = generate_audio(recognized_text, "YourAzureSpeechKey", "YourAzureRegion")
+
+            if audio_data:
+                # Play the audio
+                play_audio(audio_data)
+            else:
+                speak_failure("Failed to generate audio.", "YourAzureSpeechKey", "YourAzureRegion")
+        else:
+            speak_failure("No text recognized.", "YourAzureSpeechKey", "YourAzureRegion")
+    else:
+        # If no frame was captured, try to read an image file
+        image_path = "path_to_your_image.jpg"  # Replace with the path to your image file
+        
+        if os.path.exists(image_path):
+            # Read the image file
+            image = cv2.imread(image_path)
+            
+            # Recognize text from the image
+            recognized_text = recognize_text(image, subscription_key, endpoint)
+            
+            if recognized_text:
+                # Generate audio from recognized text
+                audio_data = generate_audio(recognized_text, "YourAzureSpeechKey", "YourAzureRegion")
+
+                if audio_data:
+                    # Play the audio
+                    play_audio(audio_data)
+                else:
+                    speak_failure("Failed to generate audio.", "YourAzureSpeechKey", "YourAzureRegion")
+            else:
+                speak_failure("No text recognized.", "YourAzureSpeechKey", "YourAzureRegion")
+        else:
+            speak_failure("Failed to capture frame from video stream or read image file.", "YourAzureSpeechKey", "YourAzureRegion")
+            break
+
+# Release the video capture object
+cap.release()
+
