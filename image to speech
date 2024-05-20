@@ -74,7 +74,7 @@ def speak_failure(message, azure_key, azure_region):
         print(f"Error speaking text: {e}")
 
 # Azure Cognitive Services credentials
-subscription_key = "YourAzureCognitiveServicesKey"
+subscription_key = "4700c3f4ad494214a23042125d4bb1fc"
 endpoint = "YourAzureCognitiveServicesEndpoint"
 
 # Video capture from camera
